@@ -1,0 +1,56 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql" // <--- 这里改成了 mysql
+  url      = env("DATABASE_URL")
+}
+
+model Admin {
+  id        String   @id @default(uuid())
+  username  String   @unique
+  password  String
+  createdAt DateTime @default(now())
+}
+
+model License {
+  id          String    @id @default(uuid())
+  key         String    @unique
+
+  // MySQL 中 String 默认是 VARCHAR(191)，对这些字段足够了
+  status      String    @default("ACTIVE")
+  strategy    String    @default("FLOATING")
+
+  expiresAt   DateTime?
+  maxMachines Int       @default(1)
+
+  // 备注和联系方式可能较长，可以用 Text (可选，不加也行，默认191够存短备注)
+  remark      String?   @db.Text
+  contact     String?
+
+  machines    Machine[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Machine {
+  id          String   @id @default(uuid())
+
+  // 硬件指纹有些算法生成得很长，建议设长一点
+  fingerprint String   @db.VarChar(255)
+
+  ip          String?
+  platform    String?
+  name        String?
+  lastSeen    DateTime @default(now())
+
+  licenseId   String
+  license     License  @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+
+  // 联合唯一索引
+  @@unique([licenseId, fingerprint])
+}
+
+
