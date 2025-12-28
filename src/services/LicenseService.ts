@@ -10,7 +10,10 @@ export class LicenseService {
     if (license.expiresAt && dayjs().isAfter(license.expiresAt)) {
       if (license.status !== LicenseStatus.EXPIRED) {
         // 懒更新：顺手改状态
-        await prisma.license.update({ where: { id: license.id }, data: { status: LicenseStatus.EXPIRED } })
+        await prisma.license.update({
+          where: { id: license.id },
+          data: { status: LicenseStatus.EXPIRED },
+        })
       }
       throw new Error('授权码已过期')
     }
@@ -96,5 +99,40 @@ export class LicenseService {
     })
 
     return { valid: true, alive: true }
+  }
+
+  /**
+   * [新增] 获取授权详情 (只读)
+   * 用于客户端查询：过期时间、最大数量、当前占用
+   */
+  static async getInfo(key: string) {
+    // 1. 查询 License 及其绑定的机器
+    const license = await prisma.license.findUnique({
+      where: { key },
+      include: {
+        machines: true, // 包含机器列表以便计算数量
+      },
+    })
+
+    if (!license) throw new Error('授权码无效')
+
+    // 2. 检查过期状态 (逻辑与 activate 保持一致)
+    await this.checkExpiry(license)
+
+    // 3. 计算数据
+    const usedCount = license.machines.length
+    const maxMachines = license.maxMachines
+    const remainingDays = license.expiresAt ? dayjs(license.expiresAt).diff(dayjs(), 'day') : 99999 // 永久
+
+    // 4. 返回脱敏后的信息 (不要返回 private 信息)
+    return {
+      valid: true, // 只要查到了且没报错，就是有效的
+      status: license.status,
+      maxMachines: maxMachines,
+      usedMachines: usedCount,
+      expiresAt: license.expiresAt,
+      remainingDays: remainingDays,
+      strategy: license.strategy,
+    }
   }
 }

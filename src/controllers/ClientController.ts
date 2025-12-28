@@ -33,5 +33,29 @@ export class ClientController {
       res.status(403).json(signResponse({ success: false, code, error: e.message }))
     }
   }
-}
+  /**
+   * [新增] 查询授权信息接口
+   */
+  static async check(req: Request, res: Response) {
+    try {
+      const { key } = req.body
 
+      if (!key) {
+        return res.status(400).json(signResponse({ success: false, error: '缺少授权码' }))
+      }
+
+      const info = await LicenseService.getInfo(key)
+
+      // 同样使用 RSA 签名返回
+      res.json(
+        signResponse({
+          success: true,
+          ...info,
+        })
+      )
+    } catch (e: any) {
+      // 查询失败不需要返回 KICKED，普通错误即可
+      res.status(403).json(signResponse({ success: false, error: e.message }))
+    }
+  }
+}
