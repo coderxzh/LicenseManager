@@ -3,14 +3,19 @@ import { PrismaClient } from '@prisma/client'
 import { v4 as uuidv4 } from 'uuid'
 import dayjs from 'dayjs'
 import { LicenseStatus, LicenseStrategy } from '../enums'
+import { OperationLogService } from '../services/OperationLogService'
 
 const prisma = new PrismaClient()
+
+function getAdmin(req: Request) {
+  return (req as any).user as { id: string; username: string } | undefined
+}
 
 export class AdminController {
   // 生成授权码
   static async createLicense(req: Request, res: Response) {
     try {
-      const { days, maxMachines, strategy, remark } = req.body
+      const { days, maxMachines, strategy, remark, standardApikey, advancedApikey, grasaiApikey, account } = req.body
       const license = await prisma.license.create({
         data: {
           key: uuidv4().toUpperCase(),
@@ -18,9 +23,22 @@ export class AdminController {
           maxMachines: maxMachines || 1,
           strategy: strategy || LicenseStrategy.FLOATING,
           remark,
+          standardApikey,
+          advancedApikey,
+          grasaiApikey,
+          account,
           status: LicenseStatus.ACTIVE,
         },
       })
+
+      await OperationLogService.log(
+        'CREATE_LICENSE',
+        'LICENSE',
+        license.id,
+        getAdmin(req),
+        { key: license.key, days, maxMachines, strategy, remark, account }
+      )
+
       res.json({ success: true, data: license })
     } catch (e: any) {
       res.status(500).json({ error: e.message })
@@ -225,15 +243,19 @@ export class AdminController {
     try {
       const { id } = req.params
       // 1. 解构前端传来的参数
-      const { status, remark, maxMachines, strategy, addDays } = req.body
+      const { status, remark, maxMachines, strategy, addDays, standardApikey, advancedApikey, grasaiApikey, account } = req.body
 
       // 2. 准备要更新到数据库的对象 (只包含数据库里有的字段)
       const updateData: any = {}
 
       if (status) updateData.status = status
-      if (remark) updateData.remark = remark
+      if (remark !== undefined) updateData.remark = remark
       if (maxMachines) updateData.maxMachines = maxMachines
       if (strategy) updateData.strategy = strategy
+      if (standardApikey !== undefined) updateData.standardApikey = standardApikey
+      if (advancedApikey !== undefined) updateData.advancedApikey = advancedApikey
+      if (grasaiApikey !== undefined) updateData.grasaiApikey = grasaiApikey
+      if (account !== undefined) updateData.account = account
 
       // 3. 特殊处理：如果有 addDays，则需要计算新的 expiresAt
       if (addDays && typeof addDays === 'number') {
@@ -263,6 +285,14 @@ export class AdminController {
         data: updateData,
       })
 
+      await OperationLogService.log(
+        'UPDATE_LICENSE',
+        'LICENSE',
+        id,
+        getAdmin(req),
+        { key: updated.key, changes: { status, remark, maxMachines, strategy, addDays, standardApikey, advancedApikey, grasaiApikey, account } }
+      )
+
       res.json({ success: true, data: updated })
     } catch (error: any) {
       console.error(error) // 打印错误日志方便调试
@@ -271,12 +301,79 @@ export class AdminController {
   }
 
   static async deleteLicense(req: Request, res: Response) {
-    await prisma.license.delete({ where: { id: req.params.id } })
-    res.json({ success: true })
+    try {
+      const { id } = req.params
+      const license = await prisma.license.findUnique({ where: { id }, select: { key: true } })
+      await prisma.license.delete({ where: { id } })
+
+      await OperationLogService.log(
+        'DELETE_LICENSE',
+        'LICENSE',
+        id,
+        getAdmin(req),
+        { key: license?.key }
+      )
+
+      res.json({ success: true })
+    } catch (e: any) {
+      res.status(500).json({ error: e.message })
+    }
   }
 
   static async resetMachines(req: Request, res: Response) {
-    await prisma.machine.deleteMany({ where: { licenseId: req.params.id } })
-    res.json({ success: true })
+    try {
+      const { id } = req.params
+      const license = await prisma.license.findUnique({ where: { id }, select: { key: true } })
+      await prisma.machine.deleteMany({ where: { licenseId: id } })
+
+      await OperationLogService.log(
+        'RESET_MACHINES',
+        'LICENSE',
+        id,
+        getAdmin(req),
+        { key: license?.key }
+      )
+
+      res.json({ success: true })
+    } catch (e: any) {
+      res.status(500).json({ error: e.message })
+    }
+  }
+
+  // 操作记录列表
+  static async listLogs(req: Request, res: Response) {
+    try {
+      const page = parseInt(req.query.page as string) || 1
+      const pageSize = parseInt(req.query.pageSize as string) || 20
+      const action = req.query.action as string | undefined
+      const targetType = req.query.targetType as string | undefined
+      const targetId = req.query.targetId as string | undefined
+      const adminUsername = req.query.adminUsername as string | undefined
+
+      const where: any = {}
+      if (action) where.action = action
+      if (targetType) where.targetType = targetType
+      if (targetId) where.targetId = targetId
+      if (adminUsername) where.adminUsername = adminUsername
+
+      const [total, list] = await Promise.all([
+        prisma.operationLog.count({ where }),
+        prisma.operationLog.findMany({
+          where,
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+          orderBy: { createdAt: 'desc' },
+        }),
+      ])
+
+      const formattedList = list.map(item => ({
+        ...item,
+        details: item.details ? JSON.parse(item.details) : null,
+      }))
+
+      res.json({ success: true, data: { total, page, pageSize, list: formattedList } })
+    } catch (e: any) {
+      res.status(500).json({ error: e.message })
+    }
   }
 }

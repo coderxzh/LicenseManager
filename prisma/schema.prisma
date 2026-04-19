@@ -26,10 +26,15 @@ model License {
   maxMachines Int       @default(1)
 
   // 备注和联系方式可能较长，可以用 Text (可选，不加也行，默认191够存短备注)
-  remark      String?   @db.Text
-  contact     String?
+  remark       String?   @db.Text
+  contact      String?
 
-  machines    Machine[]
+  standardApikey  String?
+  advancedApikey  String?
+  grasaiApikey    String?
+  account         String?   // Runninghub 会员账号
+
+  machines     Machine[]
 
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -51,6 +56,17 @@ model Machine {
 
   // 联合唯一索引
   @@unique([licenseId, fingerprint])
+}
+
+model OperationLog {
+  id            String   @id @default(uuid())
+  adminId       String?
+  adminUsername String?
+  action        String
+  targetType    String
+  targetId      String?
+  details       String?  @db.Text
+  createdAt     DateTime @default(now())
 }
 
 

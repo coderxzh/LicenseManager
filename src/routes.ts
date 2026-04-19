@@ -24,5 +24,6 @@ router.delete('/admin/licenses/:id', AdminController.deleteLicense)
 router.delete('/admin/licenses/:id/machines', AdminController.resetMachines)
 router.get('/admin/stats', AdminController.getStats)
 router.get('/admin/machines', AdminController.listMachines)
+router.get('/admin/logs', AdminController.listLogs)
 
 export default router
