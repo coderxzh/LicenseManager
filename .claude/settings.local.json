@@ -4,7 +4,8 @@
       "Bash(npx prisma *)",
       "Bash(./node_modules/.bin/prisma --version)",
       "Bash(npm install *)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(npm run *)"
     ]
   }
 }

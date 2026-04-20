@@ -69,4 +69,19 @@ model OperationLog {
   createdAt     DateTime @default(now())
 }
 
+model ApiKey {
+  id               String   @id @default(uuid())
+  grsaiId          String?  @map("grsai_id")
+  apiKey           String   @unique @map("api_key")
+  name             String
+  allocatedCredits BigInt   @default(0) @map("allocated_credits")
+  type             Int      @default(0)
+  expireTime       BigInt   @default(0) @map("expire_time")
+  licenseId        String?  @map("license_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@index([licenseId])
+  @@map("api_keys")
+}
 
