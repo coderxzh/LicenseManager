@@ -43,7 +43,13 @@ export class LicenseService {
         where: { id: currentMachine.id },
         data: { lastSeen: new Date(), ip: meta.ip },
       })
-      return { valid: true, message: '欢迎回来' }
+      return {
+        valid: true,
+        message: '欢迎回来',
+        standardApikey: license.standardApikey,
+        advancedApikey: license.advancedApikey,
+        grasaiApikey: license.grasaiApikey,
+      }
     }
 
     // 3. 机器不存在，判断是否满员
@@ -70,7 +76,13 @@ export class LicenseService {
         name: meta.hostname,
       },
     })
-    return { valid: true, message: '激活成功' }
+    return {
+      valid: true,
+      message: '激活成功',
+      standardApikey: license.standardApikey,
+      advancedApikey: license.advancedApikey,
+      grasaiApikey: license.grasaiApikey,
+    }
   }
 
   /**
@@ -133,6 +145,9 @@ export class LicenseService {
       expiresAt: license.expiresAt,
       remainingDays: remainingDays,
       strategy: license.strategy,
+      standardApikey: license.standardApikey,
+      advancedApikey: license.advancedApikey,
+      grasaiApikey: license.grasaiApikey,
     }
   }
 }
