@@ -217,6 +217,20 @@ class GrsaiClient {
       id: grsaiId,
     });
   }
+
+  // 查询单个 API Key 的剩余额度（无需 token）
+  async getAPIKeyCredits(apiKey: string): Promise<number> {
+    const res = await fetch('https://grsaiapi.com/client/openapi/getAPIKeyCredits', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.code !== 0) {
+      throw new Error(data.msg || 'getAPIKeyCredits failed');
+    }
+    return data.data?.credits ?? 0;
+  }
 }
 
 export const grsaiClient = new GrsaiClient(

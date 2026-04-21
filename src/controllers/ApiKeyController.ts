@@ -51,16 +51,27 @@ export class ApiKeyController {
         }),
       ])
 
-      const formattedList = list.map((item) => ({
-        id: item.id,
-        apiKey: item.apiKey,
-        name: item.name,
-        allocatedCredits: Number(item.allocatedCredits),
-        type: item.type,
-        expireTime: Number(item.expireTime),
-        licenseId: item.licenseId,
-        createdAt: item.createdAt.toISOString(),
-      }))
+      const formattedList = await Promise.all(
+        list.map(async (item) => {
+          let credits = 0
+          try {
+            credits = await grsaiClient.getAPIKeyCredits(item.apiKey)
+          } catch {
+            credits = 0
+          }
+          return {
+            id: item.id,
+            apiKey: item.apiKey,
+            name: item.name,
+            allocatedCredits: Number(item.allocatedCredits),
+            credits,
+            type: item.type,
+            expireTime: Number(item.expireTime),
+            licenseId: item.licenseId,
+            createdAt: item.createdAt.toISOString(),
+          }
+        })
+      )
 
       res.json({
         success: true,

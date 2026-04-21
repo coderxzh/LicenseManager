@@ -58,6 +58,7 @@ GET /api/admin/api-keys?page=1&size=10
         "apiKey": "sk-xxxx",
         "name": "测试Key",
         "allocatedCredits": 50000,
+        "credits": 35000,
         "type": 1,
         "expireTime": 1750000000,
         "licenseId": "license-uuid",
@@ -72,6 +73,8 @@ GET /api/admin/api-keys?page=1&size=10
 
 | 字段 | 说明 |
 |------|------|
+| `allocatedCredits` | 已分配额度（创建时设定的额度） |
+| `credits` | 当前剩余额度（从渠道商实时查询） |
 | `type` | `0`=无限制额度，`1`=限制额度 |
 | `expireTime` | 过期时间戳（秒），`0`=永不过期 |
 | `licenseId` | 绑定的 License ID，`null`=未绑定 |
