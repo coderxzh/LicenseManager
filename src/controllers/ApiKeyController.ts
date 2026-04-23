@@ -210,12 +210,30 @@ export class ApiKeyController {
         }
       }
 
+      // 计算渠道商应传的 credits（剩余额度）
+      let channelCredits = 0
+      if (type === 1) {
+        let currentRemaining = 0
+        try {
+          currentRemaining = await grsaiClient.getAPIKeyCredits(oldRecord.apiKey)
+        } catch {
+          currentRemaining = 0
+        }
+        channelCredits = currentRemaining + diff
+        if (channelCredits < 0) {
+          return res.status(400).json({
+            success: false,
+            error: `额度不能为负，当前剩余 ${currentRemaining}，需减少 ${Math.abs(diff)}`,
+          })
+        }
+      }
+
       // 调用渠道商更新
       await grsaiClient.updateAPIKey({
         apiKey: oldRecord.apiKey,
         name: name || oldRecord.name,
         type,
-        credits: newAllocatedCredits,
+        credits: channelCredits,
         expireTime: expireTime || 0,
       })
 
@@ -256,6 +274,92 @@ export class ApiKeyController {
         id,
         getAdmin(req),
         { name, type, credits: newAllocatedCredits, expireTime, licenseId: newLicenseId }
+      )
+
+      res.json({ success: true })
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message })
+    }
+  }
+
+  // POST /admin/api-keys/:id/recharge
+  static async rechargeApiKey(req: Request, res: Response) {
+    try {
+      const { id } = req.params
+      const { amount } = req.body
+
+      if (!amount || amount <= 0) {
+        return res.status(400).json({
+          success: false,
+          error: '充值额度必须大于 0',
+        })
+      }
+
+      const record = await prisma.apiKey.findUnique({ where: { id } })
+      if (!record) {
+        return res.status(404).json({
+          success: false,
+          error: 'API Key 不存在',
+        })
+      }
+
+      if (record.type !== 1) {
+        return res.status(400).json({
+          success: false,
+          error: '无限制额度 Key 不支持充值',
+        })
+      }
+
+      // 检查账户剩余额度
+      const dashboard = await grsaiClient.getDashboardData()
+      const totalCredits = dashboard.credits + dashboard.totalConsumed
+      const allocatedResult = await prisma.apiKey.aggregate({
+        _sum: { allocatedCredits: true },
+      })
+      const allocatedSum = Number(allocatedResult._sum.allocatedCredits || 0)
+      const remainingCredits = totalCredits - allocatedSum
+
+      if (amount > remainingCredits) {
+        return res.status(400).json({
+          success: false,
+          error: `剩余额度不足，当前剩余: ${remainingCredits}，请求充值: ${amount}`,
+        })
+      }
+
+      // 查询当前剩余额度
+      let currentRemaining = 0
+      try {
+        currentRemaining = await grsaiClient.getAPIKeyCredits(record.apiKey)
+      } catch {
+        currentRemaining = 0
+      }
+
+      const newAllocatedCredits = Number(record.allocatedCredits) + amount
+      const channelCredits = currentRemaining + amount
+
+      // 调用渠道商更新
+      await grsaiClient.updateAPIKey({
+        apiKey: record.apiKey,
+        name: record.name,
+        type: 1,
+        credits: channelCredits,
+        expireTime: Number(record.expireTime),
+      })
+
+      // 更新本地表
+      await prisma.apiKey.update({
+        where: { id },
+        data: {
+          allocatedCredits: BigInt(newAllocatedCredits),
+        },
+      })
+
+      await OperationLogService.log(
+        'RECHARGE_API_KEY',
+        'API_KEY',
+        id,
+        getAdmin(req),
+        { amount, beforeCredits: Number(record.allocatedCredits), afterCredits: newAllocatedCredits }
       )
 
       res.json({ success: true })

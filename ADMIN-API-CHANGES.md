@@ -87,6 +87,106 @@
 
 ---
 
+## 二（续）、前端对接：License 列表响应结构
+
+以下说明专供前端团队参考，展示 `GET /api/admin/licenses` 返回的 `data.list` 中每个 License 对象的完整字段结构。
+
+### 响应字段说明
+
+| 字段名 | 类型 | 说明 | 来源 |
+|--------|------|------|------|
+| `id` | `string` | License 唯一标识 | 原始字段 |
+| `key` | `string` | 授权码 | 原始字段 |
+| `status` | `string` | **展示状态**（动态计算）：`ACTIVE` / `SUSPENDED` / `EXPIRED` / `INACTIVE` | 计算字段 |
+| `rawStatus` | `string` | 数据库原始状态：`ACTIVE` / `SUSPENDED` / `EXPIRED` | 原始字段 |
+| `strategy` | `string` | 授权策略：`FLOATING` / `STRICT` | 原始字段 |
+| `expiresAt` | `string \| null` | 过期时间（ISO 8601），`null` 表示永久授权 | 原始字段 |
+| `maxMachines` | `number` | 最大允许绑定设备数 | 原始字段 |
+| `remark` | `string \| null` | 备注 | 原始字段 |
+| `contact` | `string \| null` | 联系人 | 原始字段 |
+| `standardApikey` | `string \| null` | **【新增】** 标准 API Key | 原始字段 |
+| `advancedApikey` | `string \| null` | **【新增】** 高级 API Key | 原始字段 |
+| `grasaiApikey` | `string \| null` | **【新增】** Grasai 平台 API Key | 原始字段 |
+| `account` | `string \| null` | **【新增】** Runninghub 会员账号 | 原始字段 |
+| `createdAt` | `string` | 创建时间 | 原始字段 |
+| `updatedAt` | `string` | 更新时间 | 原始字段 |
+| `remainingDays` | `number \| null` | 剩余天数（永久授权为 `99999`） | 计算字段 |
+| `isPermanent` | `boolean` | 是否为永久授权 | 计算字段 |
+| `usedCount` | `number` | 当前已绑定设备数 | 计算字段 |
+| `isActivated` | `boolean` | 是否已被激活（有绑定设备） | 计算字段 |
+| `lastSeenAt` | `string \| null` | 最后活跃时间 | 计算字段 |
+| `lastIp` | `string \| null` | 最后活跃 IP | 计算字段 |
+| `machineNames` | `string[]` | 绑定设备的名称/指纹列表 | 计算字段 |
+| `machines` | `Machine[]` | 完整的绑定设备数组（含 `fingerprint`、`ip`、`name`、`platform`、`lastSeen` 等） | 原始关联 |
+
+### 状态计算规则
+
+前端展示的 `status` 字段由后端根据以下条件动态计算：
+
+1. `ACTIVE` + 已过期（`expiresAt < now`）→ 展示为 **`EXPIRED`**
+2. `ACTIVE` + 从未激活（无绑定设备）→ 展示为 **`INACTIVE`**
+3. 其他情况保持原始状态（`ACTIVE` / `SUSPENDED` / `EXPIRED`）
+
+> 如需使用数据库原始状态进行筛选或逻辑判断，请读取 `rawStatus` 字段。
+
+### 响应示例
+
+```json
+{
+  "success": true,
+  "data": {
+    "total": 1,
+    "page": 1,
+    "pageSize": 10,
+    "list": [
+      {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "key": "XXXX-XXXX-XXXX-XXXX",
+        "status": "ACTIVE",
+        "rawStatus": "ACTIVE",
+        "strategy": "FLOATING",
+        "expiresAt": "2025-12-31T23:59:59.000Z",
+        "maxMachines": 5,
+        "remark": "测试授权码",
+        "contact": null,
+        "standardApikey": "sk-standard-xxxx",
+        "advancedApikey": "sk-advanced-xxxx",
+        "grasaiApikey": null,
+        "account": "runninghub-user",
+        "createdAt": "2025-01-01T00:00:00.000Z",
+        "updatedAt": "2025-01-15T10:30:00.000Z",
+        "remainingDays": 350,
+        "isPermanent": false,
+        "usedCount": 2,
+        "isActivated": true,
+        "lastSeenAt": "2025-01-15T10:25:00.000Z",
+        "lastIp": "192.168.1.100",
+        "machineNames": ["PC-Office", "a1b2c3d4e5f6"],
+        "machines": [
+          {
+            "id": "...",
+            "fingerprint": "a1b2c3d4e5f6",
+            "name": "PC-Office",
+            "platform": "windows",
+            "ip": "192.168.1.100",
+            "lastSeen": "2025-01-15T10:25:00.000Z",
+            "licenseId": "550e8400-e29b-41d4-a716-446655440000"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### 对接要点
+
+- **新增字段直接可用**：`standardApikey`、`advancedApikey`、`grasaiApikey`、`account` 已通过 `...item` 展开自动包含在响应中，前端在列表/详情页直接读取即可，无需额外调用接口。
+- **空值处理**：以上新增字段在未填写时可能为 `null` 或空字符串，前端展示时建议做空值判断（如显示为 "-" 或隐藏该行）。
+- **`status` vs `rawStatus`**：列表展示和标签颜色请使用 `status`（动态计算后的展示状态）；如果前端需要按原始状态筛选，Query 参数中的 `status` 筛选对应的是数据库原始状态，响应中的 `rawStatus` 与之对应。
+
+---
+
 ## 三、新增接口：操作记录查询
 
 ### `GET /api/admin/logs`

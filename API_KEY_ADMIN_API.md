@@ -73,7 +73,7 @@ GET /api/admin/api-keys?page=1&size=10
 
 | 字段 | 说明 |
 |------|------|
-| `allocatedCredits` | 已分配额度（创建时设定的额度） |
+| `allocatedCredits` | 累计分配/充值总额度（历史总投入） |
 | `credits` | 当前剩余额度（从渠道商实时查询） |
 | `type` | `0`=无限制额度，`1`=限制额度 |
 | `expireTime` | 过期时间戳（秒），`0`=永不过期 |
@@ -159,7 +159,7 @@ PUT /api/admin/api-keys/:id
 |------|------|------|------|
 | `name` | string | 是 | 新名称 |
 | `type` | number | 是 | `0`=无限制，`1`=限制额度 |
-| `credits` | number | type=1时必填 | 新的分配额度（不是增量/减量，是目标值） |
+| `credits` | number | type=1时必填 | 新的分配额度（目标值，不是增量） |
 | `expireTime` | number | 是 | 新的过期时间戳（秒），`0`=永不过期 |
 | `licenseId` | string | 否 | 新的 License ID，传 `null` 解绑 |
 
@@ -173,6 +173,11 @@ PUT /api/admin/api-keys/:id
 - **减少额度**：直接更新，释放的额度回到账户
 - **额度不变**：只更新其他字段
 
+**渠道商传值逻辑**（后端自动处理）：
+```
+channelCredits = 当前剩余额度 + (新分配额度 - 旧分配额度)
+```
+
 **License 绑定变更规则**：
 - 传入新的 `licenseId`：自动解绑旧的，绑定新的
 - 传入 `null` 或不传（与当前不同）：解绑
@@ -180,7 +185,56 @@ PUT /api/admin/api-keys/:id
 
 ---
 
-### 5. 删除 API Key
+### 5. 充值 API Key
+
+```
+POST /api/admin/api-keys/:id/recharge
+```
+
+**请求体**：
+```json
+{
+  "amount": 10000
+}
+```
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `amount` | number | 是 | 充值额度，必须 `> 0` |
+
+**后端自动处理**：
+1. 检查 Key 存在且 `type === 1`
+2. 检查主账户剩余额度是否充足
+3. 查询 Key 当前剩余额度
+4. 计算 `newAllocatedCredits = 旧 + amount`
+5. 计算 `channelCredits = 当前剩余 + amount`
+6. 调渠道商更新
+7. 更新本地 `allocatedCredits`
+
+**响应**（成功）：
+```json
+{ "success": true }
+```
+
+**响应**（额度不足）：
+```json
+{
+  "success": false,
+  "error": "剩余额度不足，当前剩余: 55000，请求充值: 100000"
+}
+```
+
+**响应**（无限制 Key）：
+```json
+{
+  "success": false,
+  "error": "无限制额度 Key 不支持充值"
+}
+```
+
+---
+
+### 6. 删除 API Key
 
 ```
 DELETE /api/admin/api-keys/:id
@@ -195,6 +249,32 @@ DELETE /api/admin/api-keys/:id
 - 先调用渠道商删除，成功后删除本地记录
 - 若绑定了 license，自动解绑（`grasaiApikey` 设为 `null`）
 - 删除后该 Key 的 `allocatedCredits` 自动释放回账户
+
+---
+
+## 额度概念说明
+
+### 两个额度的区分
+
+| 字段 | 来源 | 含义 |
+|------|------|------|
+| `allocatedCredits` | 本地数据库 | **累计分配/充值总额度**（历史总投入，只记录不随消耗减少） |
+| `credits` | 渠道商 | **当前剩余额度**（实时可用，用户消耗后会减少） |
+
+### 已消耗额度计算
+
+```
+已消耗 = allocatedCredits - getAPIKeyCredits()
+```
+
+### 额度流向
+
+| 操作 | allocatedCredits | 渠道商剩余 | 说明 |
+|------|-----------------|-----------|------|
+| 创建 50000 | 50000 | 50000 | 初始一致 |
+| 消耗 15000 | 50000 | 35000 | 本地不变，渠道商减少 |
+| 充值 10000 | 60000 | 45000 | 本地+10000，渠道商+10000 |
+| 减额 10000 | 50000 | 35000 | 本地-10000，渠道商-10000 |
 
 ---
 
@@ -223,6 +303,7 @@ HTTP 401：`{ error: "未提供 Token" }`
 | 获取列表 | `grsai.getAPIKeyList()` | `GET /api/admin/api-keys` |
 | 创建 | `grsai.createAPIKey()` | `POST /api/admin/api-keys` |
 | 更新 | `grsai.updateAPIKey()` | `PUT /api/admin/api-keys/:id` |
+| 充值 | 无 | `POST /api/admin/api-keys/:id/recharge` |
 | 删除 | `grsai.deleteAPIKey()` | `DELETE /api/admin/api-keys/:id` |
 
 ---
@@ -234,7 +315,7 @@ HTTP 401：`{ error: "未提供 Token" }`
 | 第一卡片 | 账户积分（当前 credits） | **账户总额度**（credits + totalConsumed） |
 | 第二卡片 | 已分配积分（当前页 credits 累加） | **已分配额度**（SUM allocated_credits） |
 | 第三卡片 | 剩余积分 | **账户剩余额度**（总额度 - 已分配） |
-| 表格-额度列 | 当前剩余额度 | **已分配额度**（allocatedCredits） |
+| 表格-额度列 | 当前剩余额度 | **已分配额度**（allocatedCredits）+ **当前剩余**（credits） |
 
 ---
 
