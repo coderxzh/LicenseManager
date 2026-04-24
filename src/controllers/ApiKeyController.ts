@@ -368,6 +368,51 @@ export class ApiKeyController {
     }
   }
 
+  // POST /admin/api-keys/:id/prepare-delete
+  static async prepareDeleteApiKey(req: Request, res: Response) {
+    try {
+      const { id } = req.params
+
+      const record = await prisma.apiKey.findUnique({ where: { id } })
+      if (!record) {
+        return res.status(404).json({ success: false, error: 'API Key 不存在' })
+      }
+
+      // 查询当前剩余额度
+      let currentRemaining = 0
+      if (record.type === 1) {
+        try {
+          currentRemaining = await grsaiClient.getAPIKeyCredits(record.apiKey)
+        } catch {
+          currentRemaining = 0
+        }
+      }
+
+      // 调用渠道商更新（复用编辑接口的 diff 计算逻辑）
+      if (record.type === 1) {
+        const diff = currentRemaining - Number(record.allocatedCredits)
+        const channelCredits = currentRemaining + diff
+        await grsaiClient.updateAPIKey({
+          apiKey: record.apiKey,
+          name: record.name,
+          type: record.type,
+          credits: channelCredits,
+          expireTime: Number(record.expireTime),
+        })
+      }
+
+      // 本地 UPDATE 额度为剩余值
+      await prisma.apiKey.update({
+        where: { id },
+        data: { allocatedCredits: BigInt(currentRemaining) },
+      })
+
+      res.json({ success: true })
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message })
+    }
+  }
+
   // DELETE /admin/api-keys/:id
   static async deleteApiKey(req: Request, res: Response) {
     try {

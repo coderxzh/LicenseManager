@@ -33,6 +33,7 @@ router.get('/admin/api-keys', ApiKeyController.listApiKeys)
 router.post('/admin/api-keys', ApiKeyController.createApiKey)
 router.put('/admin/api-keys/:id', ApiKeyController.updateApiKey)
 router.post('/admin/api-keys/:id/recharge', ApiKeyController.rechargeApiKey)
+router.post('/admin/api-keys/:id/prepare-delete', ApiKeyController.prepareDeleteApiKey)
 router.delete('/admin/api-keys/:id', ApiKeyController.deleteApiKey)
 
 export default router
