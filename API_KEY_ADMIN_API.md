@@ -234,21 +234,84 @@ POST /api/admin/api-keys/:id/recharge
 
 ---
 
-### 6. 删除 API Key
+### 6. 准备删除 API Key（新增）
+
+```
+POST /api/admin/api-keys/:id/prepare-delete
+```
+
+**说明**：
+删除操作拆分为两步，此接口为**第一步**。将本地 `allocatedCredits` 更新为当前剩余额度，并调用渠道商更新。
+
+**响应**（成功）：
+```json
+{ "success": true }
+```
+
+**响应**（Key 不存在）：
+```json
+{ "success": false, "error": "API Key 不存在" }
+```
+
+**幂等性**：
+若 `allocatedCredits` 已经等于当前剩余额度，会跳过重复更新，直接返回成功。
+
+---
+
+### 7. 确认删除 API Key
 
 ```
 DELETE /api/admin/api-keys/:id
 ```
 
-**响应**：
+**说明**：
+删除操作拆分为两步，此接口为**第二步**。物理删除本地记录，并调用渠道商删除 Key。
+
+**响应**（成功）：
 ```json
 { "success": true }
 ```
 
+**响应**（Key 不存在）：
+```json
+{ "success": false, "error": "API Key 不存在" }
+```
+
 **注意**：
-- 先调用渠道商删除，成功后删除本地记录
 - 若绑定了 license，自动解绑（`grasaiApikey` 设为 `null`）
 - 删除后该 Key 的 `allocatedCredits` 自动释放回账户
+
+---
+
+## 删除流程变更（重要）
+
+### 之前（一步删除）
+
+```javascript
+await axios.delete(`/api/admin/api-keys/${id}`)
+```
+
+### 之后（两步删除）
+
+```javascript
+// 第一步：准备删除（更新额度为剩余值）
+await axios.post(`/api/admin/api-keys/${id}/prepare-delete`)
+
+// 第二步：确认删除（物理删除记录）
+await axios.delete(`/api/admin/api-keys/${id}`)
+```
+
+### 失败处理策略
+
+| 场景 | 状态 | 前端处理 |
+|------|------|----------|
+| prepare-delete 失败 | 无任何副作用 | 提示错误，用户可重试整个流程 |
+| prepare-delete 成功，delete 失败 | 额度已回收，但记录仍在 | 提示"额度已回收，记录删除失败"，提供**重试删除**按钮（只调 DELETE，不再调 prepare-delete） |
+| prepare-delete 成功，delete 成功 | 完全删除 | 刷新列表 |
+
+### 为什么拆两步？
+
+MariaDB 在同一个 HTTP 请求内先 UPDATE 再 DELETE 时，aggregate SUM 查询可能看到 UPDATE 之前的旧值，导致回收额度计算错误。拆成两个独立请求后，网络间隔让 MVCC 自然刷新，彻底解决这个问题。
 
 ---
 

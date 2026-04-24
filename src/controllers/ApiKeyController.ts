@@ -388,6 +388,11 @@ export class ApiKeyController {
         }
       }
 
+      // 幂等：如果额度已等于剩余值，跳过更新
+      if (Number(record.allocatedCredits) === currentRemaining) {
+        return res.json({ success: true })
+      }
+
       // 调用渠道商更新（复用编辑接口的 diff 计算逻辑）
       if (record.type === 1) {
         const diff = currentRemaining - Number(record.allocatedCredits)
