@@ -340,6 +340,26 @@ export class AdminController {
     }
   }
 
+  // 查询已绑定 Grasai API Key 的 License 列表
+  static async listBoundApiKeys(req: Request, res: Response) {
+    try {
+      const licenses = await prisma.license.findMany({
+        where: { grasaiApikey: { not: null } },
+        select: { id: true, grasaiApikey: true, remark: true },
+      })
+
+      const data = licenses.map(l => ({
+        apiKey: l.grasaiApikey!,
+        licenseId: l.id,
+        licenseRemark: l.remark,
+      }))
+
+      res.json({ success: true, data })
+    } catch (e: any) {
+      res.status(500).json({ error: e.message })
+    }
+  }
+
   // 操作记录列表
   static async listLogs(req: Request, res: Response) {
     try {

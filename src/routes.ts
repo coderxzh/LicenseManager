@@ -2,7 +2,6 @@ import express from 'express'
 import { AuthController } from './controllers/AuthController'
 import { AdminController } from './controllers/AdminController'
 import { ClientController } from './controllers/ClientController'
-import { ApiKeyController } from './controllers/ApiKeyController'
 import { verifyToken } from './middleware/auth'
 
 const router = express.Router()
@@ -26,14 +25,6 @@ router.delete('/admin/licenses/:id/machines', AdminController.resetMachines)
 router.get('/admin/stats', AdminController.getStats)
 router.get('/admin/machines', AdminController.listMachines)
 router.get('/admin/logs', AdminController.listLogs)
-
-// API Key 额度管理
-router.get('/admin/api-key-stats', ApiKeyController.getStats)
-router.get('/admin/api-keys', ApiKeyController.listApiKeys)
-router.post('/admin/api-keys', ApiKeyController.createApiKey)
-router.put('/admin/api-keys/:id', ApiKeyController.updateApiKey)
-router.post('/admin/api-keys/:id/recharge', ApiKeyController.rechargeApiKey)
-router.post('/admin/api-keys/:id/prepare-delete', ApiKeyController.prepareDeleteApiKey)
-router.delete('/admin/api-keys/:id', ApiKeyController.deleteApiKey)
+router.get('/admin/licenses/bound-apikeys', AdminController.listBoundApiKeys)
 
 export default router
