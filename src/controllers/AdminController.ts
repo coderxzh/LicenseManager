@@ -395,6 +395,42 @@ export class AdminController {
     }
   }
 
+  // 删除并解绑指定 License 的 Grasai API Key
+  static async deleteGrasaiApiKey(req: Request, res: Response) {
+    try {
+      const { id } = req.params
+
+      const license = await prisma.license.findUnique({ where: { id } })
+      if (!license) {
+        return res.status(404).json({ success: false, error: '授权码不存在' })
+      }
+
+      if (!license.grasaiApikey || !license.grasaiApikey.trim()) {
+        return res.status(400).json({ success: false, error: '该授权码未绑定 Grasai API Key' })
+      }
+
+      await GrsaiService.deleteApiKey(license.grasaiApikey)
+
+      const updated = await prisma.license.update({
+        where: { id },
+        data: { grasaiApikey: null },
+      })
+
+      await OperationLogService.log(
+        'DELETE_GRSAI_APIKEY',
+        'LICENSE',
+        id,
+        getAdmin(req),
+        { key: updated.key }
+      )
+
+      res.json({ success: true })
+    } catch (e: any) {
+      console.error(e)
+      res.status(500).json({ success: false, error: e.message })
+    }
+  }
+
   // 查询已绑定 Grasai API Key 的 License 列表
   static async listBoundApiKeys(req: Request, res: Response) {
     try {
