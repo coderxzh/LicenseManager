@@ -10,5 +10,6 @@ prisma/dev.db-journal
 *.db-journal
 private.pem
 public.pem
-
-
+scripts/remote-apikeys.json
+docs
+CLAUDE.md

@@ -357,14 +357,13 @@ export class AdminController {
         return res.status(404).json({ success: false, error: '授权码不存在' })
       }
 
-      // 如果该 License 已绑定旧 Key，先远程删除并清理本地记录
+      // 如果该 License 已绑定旧 Key，先远程删除（远程失败也继续，以本地为准重建）
       if (license.grasaiApiKey) {
         try {
           await GrsaiService.deleteApiKey(license.grasaiApiKey.key)
         } catch (e: any) {
           console.error(`[createGrasaiApiKey] 删除旧 Key 失败: ${e.message}`)
         }
-        await prisma.grasaiApiKey.delete({ where: { id: license.grasaiApiKey.id } })
       }
 
       const grsaiKey = await GrsaiService.createApiKey({
@@ -374,19 +373,25 @@ export class AdminController {
         expireTime,
       })
 
-      const record = await prisma.grasaiApiKey.create({
-        data: {
-          key: grsaiKey.key,
-          name: grsaiKey.name,
-          credits: grsaiKey.credits,
-          expireTime: grsaiKey.expireTime,
-          createTime: grsaiKey.createTime,
-        },
-      })
-
-      const updated = await prisma.license.update({
-        where: { id },
-        data: { grasaiApiKeyId: record.id },
+      // 本地旧记录删除 + 新记录创建 + License 绑定，放在一个事务里，避免孤儿记录
+      const { record, updated } = await prisma.$transaction(async (tx) => {
+        if (license.grasaiApiKey) {
+          await tx.grasaiApiKey.delete({ where: { id: license.grasaiApiKey.id } })
+        }
+        const record = await tx.grasaiApiKey.create({
+          data: {
+            key: grsaiKey.key,
+            name: grsaiKey.name,
+            credits: grsaiKey.credits,
+            expireTime: grsaiKey.expireTime,
+            createTime: grsaiKey.createTime,
+          },
+        })
+        const updated = await tx.license.update({
+          where: { id },
+          data: { grasaiApiKeyId: record.id },
+        })
+        return { record, updated }
       })
 
       await OperationLogService.log(
@@ -433,8 +438,17 @@ export class AdminController {
         return res.status(400).json({ success: false, error: '该授权码未绑定 Grasai API Key' })
       }
 
-      await GrsaiService.deleteApiKey(license.grasaiApiKey.key)
-      await prisma.grasaiApiKey.delete({ where: { id: license.grasaiApiKey.id } })
+      try {
+        await GrsaiService.deleteApiKey(license.grasaiApiKey.key)
+      } catch (e: any) {
+        console.error(`[deleteGrasaiApiKey] 远程删除 Key 失败: ${e.message}`)
+        // 即使远程删除失败，也继续清理本地记录，避免绑定指向已失效的 Key
+      }
+
+      // 本地删除与解绑放在一个事务里
+      await prisma.$transaction(async (tx) => {
+        await tx.grasaiApiKey.delete({ where: { id: license.grasaiApiKey!.id } })
+      })
 
       await OperationLogService.log(
         'DELETE_GRSAI_APIKEY',
