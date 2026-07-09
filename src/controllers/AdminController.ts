@@ -16,7 +16,7 @@ export class AdminController {
   // 生成授权码
   static async createLicense(req: Request, res: Response) {
     try {
-      const { days, maxMachines, strategy, remark, standardApikey, advancedApikey, grasaiApikey, account } = req.body
+      const { days, maxMachines, strategy, remark, standardApikey, advancedApikey, account } = req.body
       const license = await prisma.license.create({
         data: {
           key: uuidv4().toUpperCase(),
@@ -26,7 +26,6 @@ export class AdminController {
           remark,
           standardApikey,
           advancedApikey,
-          grasaiApikey,
           account,
           status: LicenseStatus.ACTIVE,
         },
@@ -244,7 +243,7 @@ export class AdminController {
     try {
       const { id } = req.params
       // 1. 解构前端传来的参数
-      const { status, remark, maxMachines, strategy, addDays, standardApikey, advancedApikey, grasaiApikey, account } = req.body
+      const { status, remark, maxMachines, strategy, addDays, standardApikey, advancedApikey, account } = req.body
 
       // 2. 准备要更新到数据库的对象 (只包含数据库里有的字段)
       const updateData: any = {}
@@ -255,7 +254,6 @@ export class AdminController {
       if (strategy) updateData.strategy = strategy
       if (standardApikey !== undefined) updateData.standardApikey = standardApikey
       if (advancedApikey !== undefined) updateData.advancedApikey = advancedApikey
-      if (grasaiApikey !== undefined) updateData.grasaiApikey = grasaiApikey
       if (account !== undefined) updateData.account = account
 
       // 3. 特殊处理：如果有 addDays，则需要计算新的 expiresAt
@@ -291,7 +289,7 @@ export class AdminController {
         'LICENSE',
         id,
         getAdmin(req),
-        { key: updated.key, changes: { status, remark, maxMachines, strategy, addDays, standardApikey, advancedApikey, grasaiApikey, account } }
+        { key: updated.key, changes: { status, remark, maxMachines, strategy, addDays, standardApikey, advancedApikey, account } }
       )
 
       res.json({ success: true, data: updated })
@@ -351,9 +349,22 @@ export class AdminController {
         return res.status(400).json({ success: false, error: '缺少 name' })
       }
 
-      const license = await prisma.license.findUnique({ where: { id } })
+      const license = await prisma.license.findUnique({
+        where: { id },
+        include: { grasaiApiKey: true },
+      })
       if (!license) {
         return res.status(404).json({ success: false, error: '授权码不存在' })
+      }
+
+      // 如果该 License 已绑定旧 Key，先远程删除并清理本地记录
+      if (license.grasaiApiKey) {
+        try {
+          await GrsaiService.deleteApiKey(license.grasaiApiKey.key)
+        } catch (e: any) {
+          console.error(`[createGrasaiApiKey] 删除旧 Key 失败: ${e.message}`)
+        }
+        await prisma.grasaiApiKey.delete({ where: { id: license.grasaiApiKey.id } })
       }
 
       const grsaiKey = await GrsaiService.createApiKey({
@@ -363,9 +374,19 @@ export class AdminController {
         expireTime,
       })
 
+      const record = await prisma.grasaiApiKey.create({
+        data: {
+          key: grsaiKey.key,
+          name: grsaiKey.name,
+          credits: grsaiKey.credits,
+          expireTime: grsaiKey.expireTime,
+          createTime: grsaiKey.createTime,
+        },
+      })
+
       const updated = await prisma.license.update({
         where: { id },
-        data: { grasaiApikey: grsaiKey.key },
+        data: { grasaiApiKeyId: record.id },
       })
 
       await OperationLogService.log(
@@ -373,7 +394,7 @@ export class AdminController {
         'LICENSE',
         id,
         getAdmin(req),
-        { key: updated.key, apiKey: grsaiKey.key, name }
+        { key: updated.key, apiKey: record.key, apiKeyId: record.id, name }
       )
 
       res.json({
@@ -382,11 +403,11 @@ export class AdminController {
           licenseId: updated.id,
           licenseKey: updated.key,
           licenseRemark: updated.remark,
-          apiKey: grsaiKey.key,
-          name: grsaiKey.name,
-          credits: grsaiKey.credits,
-          expireTime: grsaiKey.expireTime,
-          createTime: grsaiKey.createTime,
+          apiKey: record.key,
+          name: record.name,
+          credits: record.credits,
+          expireTime: record.expireTime,
+          createTime: record.createTime,
         },
       })
     } catch (e: any) {
@@ -400,28 +421,27 @@ export class AdminController {
     try {
       const { id } = req.params
 
-      const license = await prisma.license.findUnique({ where: { id } })
+      const license = await prisma.license.findUnique({
+        where: { id },
+        include: { grasaiApiKey: true },
+      })
       if (!license) {
         return res.status(404).json({ success: false, error: '授权码不存在' })
       }
 
-      if (!license.grasaiApikey || !license.grasaiApikey.trim()) {
+      if (!license.grasaiApiKey) {
         return res.status(400).json({ success: false, error: '该授权码未绑定 Grasai API Key' })
       }
 
-      await GrsaiService.deleteApiKey(license.grasaiApikey)
-
-      const updated = await prisma.license.update({
-        where: { id },
-        data: { grasaiApikey: null },
-      })
+      await GrsaiService.deleteApiKey(license.grasaiApiKey.key)
+      await prisma.grasaiApiKey.delete({ where: { id: license.grasaiApiKey.id } })
 
       await OperationLogService.log(
         'DELETE_GRSAI_APIKEY',
         'LICENSE',
         id,
         getAdmin(req),
-        { key: updated.key }
+        { key: license.key, apiKey: license.grasaiApiKey.key, apiKeyId: license.grasaiApiKey.id }
       )
 
       res.json({ success: true })
@@ -431,18 +451,89 @@ export class AdminController {
     }
   }
 
+  // 更新 Grasai API Key 信息（远程优先）
+  static async updateGrasaiApiKey(req: Request, res: Response) {
+    try {
+      const { id } = req.params
+      const { name, type, credits, expireTime } = req.body
+
+      if (!name || typeof name !== 'string') {
+        return res.status(400).json({ success: false, error: '缺少 name' })
+      }
+
+      const record = await prisma.grasaiApiKey.findUnique({ where: { id } })
+      if (!record) {
+        return res.status(404).json({ success: false, error: 'API Key 不存在' })
+      }
+
+      await GrsaiService.updateApiKeyInfo(record.key, {
+        name,
+        type: type ?? 0,
+        credits,
+        expireTime,
+      })
+
+      const updated = await prisma.grasaiApiKey.update({
+        where: { id },
+        data: {
+          name,
+          credits: credits ?? 0,
+          expireTime: expireTime ?? 0,
+        },
+      })
+
+      await OperationLogService.log(
+        'UPDATE_GRSAI_APIKEY',
+        'GRSAI_APIKEY',
+        id,
+        getAdmin(req),
+        { apiKey: updated.key, name, type, credits, expireTime }
+      )
+
+      res.json({ success: true, data: updated })
+    } catch (e: any) {
+      console.error(e)
+      res.status(500).json({ success: false, error: e.message })
+    }
+  }
+
+  // 查询所有 Grasai API Key
+  static async listGrasaiApiKeys(req: Request, res: Response) {
+    try {
+      const page = parseInt(req.query.page as string) || 1
+      const pageSize = parseInt(req.query.pageSize as string) || 20
+
+      const [total, list] = await Promise.all([
+        prisma.grasaiApiKey.count(),
+        prisma.grasaiApiKey.findMany({
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            license: { select: { id: true, key: true, remark: true } },
+          },
+        }),
+      ])
+
+      res.json({ success: true, data: { total, page, pageSize, list } })
+    } catch (e: any) {
+      res.status(500).json({ error: e.message })
+    }
+  }
+
   // 查询已绑定 Grasai API Key 的 License 列表
   static async listBoundApiKeys(req: Request, res: Response) {
     try {
       const licenses = await prisma.license.findMany({
-        where: { grasaiApikey: { not: null } },
-        select: { id: true, grasaiApikey: true, remark: true },
+        where: { grasaiApiKeyId: { not: null } },
+        include: { grasaiApiKey: { select: { key: true, name: true } } },
       })
 
       const data = licenses
-        .filter(l => l.grasaiApikey!.trim().length > 0)
+        .filter(l => l.grasaiApiKey)
         .map(l => ({
-          apiKey: l.grasaiApikey!,
+          apiKey: l.grasaiApiKey!.key,
+          name: l.grasaiApiKey!.name,
           licenseId: l.id,
           licenseRemark: l.remark,
         }))
