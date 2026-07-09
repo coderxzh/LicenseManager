@@ -34,10 +34,26 @@ model License {
   grasaiApikey    String?
   account         String?   // Runninghub 会员账号
 
+  // 新增 Grasai API Key 关联（一对一）
+  grasaiApiKeyId  String?       @unique
+  grasaiApiKey    GrasaiApiKey? @relation(fields: [grasaiApiKeyId], references: [id], onDelete: SetNull)
+
   machines     Machine[]
 
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+}
+
+model GrasaiApiKey {
+  id         String   @id @default(uuid())
+  key        String   @unique
+  name       String
+  credits    Int?
+  expireTime Int?
+  createTime Int?
+  license    License?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
 
 model Machine {
