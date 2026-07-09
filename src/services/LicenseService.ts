@@ -84,7 +84,7 @@ export class LicenseService {
       message: '激活成功',
       standardApikey: license.standardApikey,
       advancedApikey: license.advancedApikey,
-      grasaiApikey: license.grasaiApikey,
+      grasaiApikey: license.grasaiApiKey?.key,
     }
   }
 
@@ -151,7 +151,7 @@ export class LicenseService {
       strategy: license.strategy,
       standardApikey: license.standardApikey,
       advancedApikey: license.advancedApikey,
-      grasaiApikey: license.grasaiApikey,
+      grasaiApikey: license.grasaiApiKey?.key,
     }
   }
 }
