@@ -11,5 +11,5 @@ prisma/dev.db-journal
 private.pem
 public.pem
 scripts/remote-apikeys.json
-docs
+docs/superpowers/
 CLAUDE.md

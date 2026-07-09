@@ -25,7 +25,6 @@ router.delete('/admin/licenses/:id/machines', AdminController.resetMachines)
 router.get('/admin/stats', AdminController.getStats)
 router.get('/admin/machines', AdminController.listMachines)
 router.get('/admin/logs', AdminController.listLogs)
-router.get('/admin/licenses/bound-apikeys', AdminController.listBoundApiKeys)
 router.post('/admin/licenses/:id/grasai-apikey', AdminController.createGrasaiApiKey)
 router.delete('/admin/licenses/:id/grasai-apikey', AdminController.deleteGrasaiApiKey)
 

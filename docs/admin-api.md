@@ -216,30 +216,6 @@ model GrasaiApiKey {
 
 ---
 
-## 5. 查询已绑定 Grasai API Key 的 License 列表
-
-- **GET** `/api/admin/licenses/bound-apikeys`
-
-返回所有绑定了 Grasai API Key 的 License，包含 API Key 名称。
-
-### 响应示例
-
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "apiKey": "sk-xxxxxxxxxxxxxx",
-      "name": "测试Key",
-      "licenseId": "...",
-      "licenseRemark": "测试授权"
-    }
-  ]
-}
-```
-
----
-
 ## License 创建/编辑接口的变更
 
 `POST /api/admin/licenses` 和 `PUT /api/admin/licenses/:id` **不再接受 `grasaiApikey` 字段**。
