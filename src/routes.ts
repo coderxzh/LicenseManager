@@ -29,4 +29,7 @@ router.get('/admin/licenses/bound-apikeys', AdminController.listBoundApiKeys)
 router.post('/admin/licenses/:id/grasai-apikey', AdminController.createGrasaiApiKey)
 router.delete('/admin/licenses/:id/grasai-apikey', AdminController.deleteGrasaiApiKey)
 
+router.get('/admin/grasai-apikeys', AdminController.listGrasaiApiKeys)
+router.put('/admin/grasai-apikeys/:id', AdminController.updateGrasaiApiKey)
+
 export default router
