@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid'
 import dayjs from 'dayjs'
 import { LicenseStatus, LicenseStrategy } from '../enums'
 import { OperationLogService } from '../services/OperationLogService'
+import { GrsaiService } from '../services/GrsaiService'
 
 const prisma = new PrismaClient()
 
@@ -340,6 +341,60 @@ export class AdminController {
     }
   }
 
+  // 为指定 License 创建并绑定 Grasai API Key
+  static async createGrasaiApiKey(req: Request, res: Response) {
+    try {
+      const { id } = req.params
+      const { name, type, credits, expireTime } = req.body
+
+      if (!name || typeof name !== 'string') {
+        return res.status(400).json({ success: false, error: '缺少 name' })
+      }
+
+      const license = await prisma.license.findUnique({ where: { id } })
+      if (!license) {
+        return res.status(404).json({ success: false, error: '授权码不存在' })
+      }
+
+      const grsaiKey = await GrsaiService.createApiKey({
+        name,
+        type: type ?? 0,
+        credits,
+        expireTime,
+      })
+
+      const updated = await prisma.license.update({
+        where: { id },
+        data: { grasaiApikey: grsaiKey.key },
+      })
+
+      await OperationLogService.log(
+        'CREATE_GRSAI_APIKEY',
+        'LICENSE',
+        id,
+        getAdmin(req),
+        { key: updated.key, apiKey: grsaiKey.key, name }
+      )
+
+      res.json({
+        success: true,
+        data: {
+          licenseId: updated.id,
+          licenseKey: updated.key,
+          licenseRemark: updated.remark,
+          apiKey: grsaiKey.key,
+          name: grsaiKey.name,
+          credits: grsaiKey.credits,
+          expireTime: grsaiKey.expireTime,
+          createTime: grsaiKey.createTime,
+        },
+      })
+    } catch (e: any) {
+      console.error(e)
+      res.status(500).json({ success: false, error: e.message })
+    }
+  }
+
   // 查询已绑定 Grasai API Key 的 License 列表
   static async listBoundApiKeys(req: Request, res: Response) {
     try {
@@ -348,11 +403,13 @@ export class AdminController {
         select: { id: true, grasaiApikey: true, remark: true },
       })
 
-      const data = licenses.map(l => ({
-        apiKey: l.grasaiApikey!,
-        licenseId: l.id,
-        licenseRemark: l.remark,
-      }))
+      const data = licenses
+        .filter(l => l.grasaiApikey!.trim().length > 0)
+        .map(l => ({
+          apiKey: l.grasaiApikey!,
+          licenseId: l.id,
+          licenseRemark: l.remark,
+        }))
 
       res.json({ success: true, data })
     } catch (e: any) {
