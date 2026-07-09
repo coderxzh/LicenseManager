@@ -31,7 +31,6 @@ model License {
 
   standardApikey  String?
   advancedApikey  String?
-  grasaiApikey    String?
   account         String?   // Runninghub 会员账号
 
   // 新增 Grasai API Key 关联（一对一）
