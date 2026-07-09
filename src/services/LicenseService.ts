@@ -26,7 +26,10 @@ export class LicenseService {
   static async activate(key: string, fingerprint: string, meta: any) {
     const license = await prisma.license.findUnique({
       where: { key },
-      include: { machines: { orderBy: { lastSeen: 'asc' } } }, // 按时间排序，第0个是最老的
+      include: {
+        machines: { orderBy: { lastSeen: 'asc' } }, // 按时间排序，第0个是最老的
+        grasaiApiKey: true,
+      },
     })
 
     if (!license) throw new Error('授权码无效')
@@ -48,7 +51,7 @@ export class LicenseService {
         message: '欢迎回来',
         standardApikey: license.standardApikey,
         advancedApikey: license.advancedApikey,
-        grasaiApikey: license.grasaiApikey,
+        grasaiApikey: license.grasaiApiKey?.key,
       }
     }
 
@@ -122,7 +125,8 @@ export class LicenseService {
     const license = await prisma.license.findUnique({
       where: { key },
       include: {
-        machines: true, // 包含机器列表以便计算数量
+        machines: true,
+        grasaiApiKey: true,
       },
     })
 
