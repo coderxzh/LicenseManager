@@ -39,6 +39,13 @@ async function request(path: string, body: Record<string, any>) {
   return json.data
 }
 
+interface UpdateApiKeyParams {
+  name: string
+  type?: number
+  credits?: number
+  expireTime?: number
+}
+
 export class GrsaiService {
   static async createApiKey(params: CreateApiKeyParams): Promise<GrsaiApiKeyData> {
     return request('/client/openapi/createAPIKey', {
@@ -51,5 +58,15 @@ export class GrsaiService {
 
   static async deleteApiKey(apiKey: string): Promise<void> {
     await request('/client/openapi/deleteAPIKey', { apiKey })
+  }
+
+  static async updateApiKeyInfo(apiKey: string, params: UpdateApiKeyParams): Promise<void> {
+    await request('/client/openapi/updateAPIKeyInfo', {
+      apiKey,
+      type: params.type ?? 0,
+      name: params.name,
+      credits: params.credits ?? 0,
+      expireTime: params.expireTime ?? 0,
+    })
   }
 }
