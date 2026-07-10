@@ -115,6 +115,13 @@ model GrasaiApiKey {
 | type | number | 否 | `0` / `1`，默认 `0` |
 | credits | number | 否 | 积分额度 |
 | expireTime | number | 否 | 10 位时间戳 |
+| **licenseId** | string \| null | 否 | 要关联的 License ID；传 `null` 解绑；目标 License 已有 Key 时会强制让旧 Key 解绑 |
+
+### 换绑说明
+
+- 传 `licenseId: null` 表示解绑当前 Key，Key 变为未绑定状态。
+- 传其他 License ID 表示换绑到该 License。
+- 如果目标 License 已绑定其他 Grasai API Key，会先让旧 Key 解绑（旧 Key 变为未绑定），再将当前 Key 绑定上去。
 
 ### 响应示例
 
@@ -129,7 +136,12 @@ model GrasaiApiKey {
     "expireTime": 0,
     "createTime": 1766737867,
     "createdAt": "...",
-    "updatedAt": "..."
+    "updatedAt": "...",
+    "license": {
+      "id": "...",
+      "key": "550E8400-...",
+      "remark": "测试授权"
+    }
   }
 }
 ```
@@ -212,6 +224,37 @@ model GrasaiApiKey {
     ]
   }
 }
+```
+
+---
+
+## 5. 删除 Grasai API Key（按 Key ID）
+
+按本地 GrasaiApiKey ID 删除 Key，支持删除未绑定到 License 的 Key。
+
+- **DELETE** `/api/admin/grasai-apikeys/:id`
+
+`:id` 为本地 `GrasaiApiKey.id`。
+
+### 响应示例
+
+```json
+{ "success": true }
+```
+
+### 说明
+
+- 先调用 Grsai 远程删除接口，远程删除成功后才会删除本地记录。
+- 远程删除失败返回 500，本地记录保留。
+
+### 错误示例
+
+```json
+{ "success": false, "error": "API Key 不存在" }
+```
+
+```json
+{ "success": false, "error": "Grsai API 调用失败" }
 ```
 
 ---
