@@ -1,5 +1,5 @@
 import { Request, Response } from 'express'
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient, Prisma } from '@prisma/client'
 import { v4 as uuidv4 } from 'uuid'
 import dayjs from 'dayjs'
 import { LicenseStatus, LicenseStrategy } from '../enums'
@@ -13,6 +13,34 @@ function getAdmin(req: Request) {
 }
 
 export class AdminController {
+  // 解绑：将关联到指定 GrasaiApiKey 的 License 的 grasaiApiKeyId 置空
+  private static async unbindApiKeyFromLicense(tx: Prisma.TransactionClient, apiKeyId: string) {
+    await tx.license.updateMany({
+      where: { grasaiApiKeyId: apiKeyId },
+      data: { grasaiApiKeyId: null },
+    })
+  }
+
+  // 绑定：将 GrasaiApiKey 绑定到目标 License；若目标 License 已有 Key，先解绑旧 Key
+  private static async bindApiKeyToLicense(tx: Prisma.TransactionClient, apiKeyId: string, licenseId: string) {
+    const targetLicense = await tx.license.findUnique({
+      where: { id: licenseId },
+      select: { grasaiApiKeyId: true },
+    })
+    if (!targetLicense) {
+      throw new Error('授权码不存在')
+    }
+
+    if (targetLicense.grasaiApiKeyId && targetLicense.grasaiApiKeyId !== apiKeyId) {
+      await this.unbindApiKeyFromLicense(tx, targetLicense.grasaiApiKeyId)
+    }
+
+    await tx.license.update({
+      where: { id: licenseId },
+      data: { grasaiApiKeyId: apiKeyId },
+    })
+  }
+
   // 生成授权码
   static async createLicense(req: Request, res: Response) {
     try {
@@ -466,13 +494,18 @@ export class AdminController {
   }
 
   // 更新 Grasai API Key 信息（远程优先）
+  // 更新 Grasai API Key 信息（远程优先），支持修改关联 License
   static async updateGrasaiApiKey(req: Request, res: Response) {
     try {
       const { id } = req.params
-      const { name, type, credits, expireTime } = req.body
+      const { name, type, credits, expireTime, licenseId } = req.body
 
       if (!name || typeof name !== 'string') {
         return res.status(400).json({ success: false, error: '缺少 name' })
+      }
+
+      if (licenseId !== undefined && licenseId !== null && (typeof licenseId !== 'string' || !licenseId.trim())) {
+        return res.status(400).json({ success: false, error: 'licenseId 格式错误' })
       }
 
       const record = await prisma.grasaiApiKey.findUnique({ where: { id } })
@@ -487,21 +520,44 @@ export class AdminController {
         expireTime,
       })
 
-      const updated = await prisma.grasaiApiKey.update({
-        where: { id },
-        data: {
-          name,
-          credits: credits ?? 0,
-          expireTime: expireTime ?? 0,
-        },
-      })
+      const updatePayload = {
+        name,
+        credits: credits ?? 0,
+        expireTime: expireTime ?? 0,
+      }
+
+      let updated
+      if (licenseId !== undefined) {
+        updated = await prisma.$transaction(async (tx) => {
+          if (licenseId === null) {
+            await this.unbindApiKeyFromLicense(tx, id)
+          } else {
+            await this.bindApiKeyToLicense(tx, id, licenseId)
+          }
+          return tx.grasaiApiKey.update({
+            where: { id },
+            data: updatePayload,
+            include: {
+              license: { select: { id: true, key: true, remark: true } },
+            },
+          })
+        })
+      } else {
+        updated = await prisma.grasaiApiKey.update({
+          where: { id },
+          data: updatePayload,
+          include: {
+            license: { select: { id: true, key: true, remark: true } },
+          },
+        })
+      }
 
       await OperationLogService.log(
         'UPDATE_GRSAI_APIKEY',
         'GRSAI_APIKEY',
         id,
         getAdmin(req),
-        { apiKey: updated.key, name, type, credits, expireTime }
+        { apiKey: updated.key, name, type, credits, expireTime, licenseId }
       )
 
       res.json({ success: true, data: updated })
