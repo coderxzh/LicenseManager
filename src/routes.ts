@@ -30,5 +30,6 @@ router.delete('/admin/licenses/:id/grasai-apikey', AdminController.deleteGrasaiA
 
 router.get('/admin/grasai-apikeys', AdminController.listGrasaiApiKeys)
 router.put('/admin/grasai-apikeys/:id', AdminController.updateGrasaiApiKey)
+router.delete('/admin/grasai-apikeys/:id', AdminController.deleteGrasaiApiKeyById)
 
 export default router

@@ -535,6 +535,40 @@ export class AdminController {
     }
   }
 
+  // 按 GrasaiApiKey ID 删除并远程删除
+  static async deleteGrasaiApiKeyById(req: Request, res: Response) {
+    try {
+      const { id } = req.params
+
+      const record = await prisma.grasaiApiKey.findUnique({ where: { id } })
+      if (!record) {
+        return res.status(404).json({ success: false, error: 'API Key 不存在' })
+      }
+
+      try {
+        await GrsaiService.deleteApiKey(record.key)
+      } catch (e: any) {
+        console.error(`[deleteGrasaiApiKeyById] 远程删除 Key 失败: ${e.message}`)
+        return res.status(500).json({ success: false, error: e.message })
+      }
+
+      await prisma.grasaiApiKey.delete({ where: { id } })
+
+      await OperationLogService.log(
+        'DELETE_GRSAI_APIKEY',
+        'GRSAI_APIKEY',
+        id,
+        getAdmin(req),
+        { apiKey: record.key, apiKeyId: record.id }
+      )
+
+      res.json({ success: true })
+    } catch (e: any) {
+      console.error(e)
+      res.status(500).json({ success: false, error: e.message })
+    }
+  }
+
   // 操作记录列表
   static async listLogs(req: Request, res: Response) {
     try {
