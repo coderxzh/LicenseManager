@@ -28,7 +28,6 @@ export class LicenseService {
       where: { key },
       include: {
         machines: { orderBy: { lastSeen: 'asc' } }, // 按时间排序，第0个是最老的
-        grasaiApiKey: true,
       },
     })
 
@@ -49,9 +48,7 @@ export class LicenseService {
       return {
         valid: true,
         message: '欢迎回来',
-        standardApikey: license.standardApikey,
-        advancedApikey: license.advancedApikey,
-        grasaiApikey: license.grasaiApiKey?.key,
+        sharedApikey: license.sharedApikey,
       }
     }
 
@@ -82,9 +79,7 @@ export class LicenseService {
     return {
       valid: true,
       message: '激活成功',
-      standardApikey: license.standardApikey,
-      advancedApikey: license.advancedApikey,
-      grasaiApikey: license.grasaiApiKey?.key,
+      sharedApikey: license.sharedApikey,
     }
   }
 
@@ -126,7 +121,6 @@ export class LicenseService {
       where: { key },
       include: {
         machines: true,
-        grasaiApiKey: true,
       },
     })
 
@@ -149,9 +143,7 @@ export class LicenseService {
       expiresAt: license.expiresAt,
       remainingDays: remainingDays,
       strategy: license.strategy,
-      standardApikey: license.standardApikey,
-      advancedApikey: license.advancedApikey,
-      grasaiApikey: license.grasaiApiKey?.key,
+      sharedApikey: license.sharedApikey,
     }
   }
 }
