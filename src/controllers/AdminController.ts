@@ -15,7 +15,7 @@ export class AdminController {
   // 生成授权码
   static async createLicense(req: Request, res: Response) {
     try {
-      const { days, maxMachines, strategy, remark, sharedApikey, account } = req.body
+      const { days, maxMachines, strategy, remark, sharedApikey } = req.body
       const license = await prisma.license.create({
         data: {
           key: uuidv4().toUpperCase(),
@@ -24,7 +24,6 @@ export class AdminController {
           strategy: strategy || LicenseStrategy.FLOATING,
           remark,
           sharedApikey,
-          account,
           status: LicenseStatus.ACTIVE,
         },
       })
@@ -34,7 +33,7 @@ export class AdminController {
         'LICENSE',
         license.id,
         getAdmin(req),
-        { key: license.key, days, maxMachines, strategy, remark, account }
+        { key: license.key, days, maxMachines, strategy, remark }
       )
 
       res.json({ success: true, data: license })
@@ -241,7 +240,7 @@ export class AdminController {
     try {
       const { id } = req.params
       // 1. 解构前端传来的参数
-      const { status, remark, maxMachines, strategy, addDays, sharedApikey, account } = req.body
+      const { status, remark, maxMachines, strategy, addDays, sharedApikey } = req.body
 
       // 2. 准备要更新到数据库的对象 (只包含数据库里有的字段)
       const updateData: any = {}
@@ -251,7 +250,6 @@ export class AdminController {
       if (maxMachines) updateData.maxMachines = maxMachines
       if (strategy) updateData.strategy = strategy
       if (sharedApikey !== undefined) updateData.sharedApikey = sharedApikey
-      if (account !== undefined) updateData.account = account
 
       // 3. 特殊处理：如果有 addDays，则需要计算新的 expiresAt
       if (addDays && typeof addDays === 'number') {
@@ -286,7 +284,7 @@ export class AdminController {
         'LICENSE',
         id,
         getAdmin(req),
-        { key: updated.key, changes: { status, remark, maxMachines, strategy, addDays, sharedApikey, account } }
+        { key: updated.key, changes: { status, remark, maxMachines, strategy, addDays, sharedApikey } }
       )
 
       res.json({ success: true, data: updated })

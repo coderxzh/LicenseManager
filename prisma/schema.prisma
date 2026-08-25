@@ -30,7 +30,6 @@ model License {
   contact      String?
 
   sharedApikey    String?
-  account         String?   // Runninghub 会员账号
 
   machines     Machine[]
 
