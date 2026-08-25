@@ -108,7 +108,7 @@ export class LicenseService {
       data: { lastSeen: new Date() },
     })
 
-    return { valid: true, alive: true }
+    return { valid: true, alive: true, sharedApikey: license.sharedApikey }
   }
 
   /**
