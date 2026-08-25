@@ -29,7 +29,8 @@ model License {
   remark       String?   @db.Text
   contact      String?
 
-  sharedApikey    String?
+  sharedApikey      String?
+  standardApikey    String?
 
   machines     Machine[]
 
