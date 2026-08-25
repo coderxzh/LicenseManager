@@ -30,7 +30,6 @@ model License {
   contact      String?
 
   sharedApikey      String?
-  standardApikey    String?
 
   machines     Machine[]
 
